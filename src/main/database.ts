@@ -11,6 +11,7 @@ function getDb(): Database.Database {
     db.pragma('journal_mode = WAL')
     db.pragma('foreign_keys = ON')
     initSchema()
+    migrate()
     seedDefaultSettings()
   }
   return db
@@ -70,6 +71,20 @@ function initSchema() {
   `)
 }
 
+// Migrations — aggiunte colonne senza perdere dati esistenti
+function migrate() {
+  const columns = (getDb().prepare("PRAGMA table_info(people)").all() as { name: string }[]).map(c => c.name)
+  if (!columns.includes('hourly_rate')) {
+    getDb().exec('ALTER TABLE people ADD COLUMN hourly_rate REAL DEFAULT 0')
+  }
+  if (!columns.includes('inquadramento')) {
+    getDb().exec("ALTER TABLE people ADD COLUMN inquadramento TEXT DEFAULT ''")
+  }
+  if (!columns.includes('appartenenza')) {
+    getDb().exec("ALTER TABLE people ADD COLUMN appartenenza TEXT DEFAULT ''")
+  }
+}
+
 function seedDefaultSettings() {
   const defaults = [
     ['overallocation_threshold', '100'],
@@ -90,14 +105,14 @@ export function getPeople() {
 
 export function createPerson(data: Record<string, unknown>) {
   const r = getDb()
-    .prepare('INSERT INTO people (name,role,seniority,email,daily_rate,fte,color) VALUES (@name,@role,@seniority,@email,@daily_rate,@fte,@color)')
+    .prepare('INSERT INTO people (name,role,seniority,inquadramento,appartenenza,email,hourly_rate,daily_rate,fte,color) VALUES (@name,@role,@seniority,@inquadramento,@appartenenza,@email,@hourly_rate,@daily_rate,@fte,@color)')
     .run(data)
   return getDb().prepare('SELECT * FROM people WHERE id=?').get(r.lastInsertRowid)
 }
 
 export function updatePerson(id: number, data: Record<string, unknown>) {
   getDb()
-    .prepare('UPDATE people SET name=@name,role=@role,seniority=@seniority,email=@email,daily_rate=@daily_rate,fte=@fte,color=@color WHERE id=@id')
+    .prepare('UPDATE people SET name=@name,role=@role,seniority=@seniority,inquadramento=@inquadramento,appartenenza=@appartenenza,email=@email,hourly_rate=@hourly_rate,daily_rate=@daily_rate,fte=@fte,color=@color WHERE id=@id')
     .run({ ...data, id })
   return getDb().prepare('SELECT * FROM people WHERE id=?').get(id)
 }

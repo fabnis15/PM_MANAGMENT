@@ -3,8 +3,11 @@ export interface Person {
   name: string
   role: string
   seniority: 'junior' | 'mid' | 'senior' | 'lead' | 'manager'
+  inquadramento: string  // es. "Quadro", "Impiegato B2", "Dirigente"
+  appartenenza: string   // es. "Team Backend", "Delivery Italia", "PMO"
   email: string
-  daily_rate: number
+  hourly_rate: number
+  daily_rate: number   // hourly_rate × working_hours_per_day (calcolato e salvato)
   fte: number
   color: string
   created_at: string

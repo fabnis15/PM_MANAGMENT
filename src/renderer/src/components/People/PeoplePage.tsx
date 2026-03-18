@@ -3,7 +3,7 @@ import { useStore } from '../../store/useStore'
 import { Person } from '../../types'
 import Modal from '../ui/Modal'
 import PersonForm from './PersonForm'
-import { Plus, Pencil, Trash2, Users, Mail, DollarSign } from 'lucide-react'
+import { Plus, Pencil, Trash2, Users, Mail, DollarSign, Building2, Tag } from 'lucide-react'
 
 const SENIORITY_COLORS: Record<string, string> = {
   junior: 'bg-slate-500/20 text-slate-400',
@@ -116,16 +116,30 @@ export default function PeoplePage() {
 
               {/* Details */}
               <div className="space-y-1.5 text-xs">
+                {person.inquadramento && (
+                  <div className="flex items-center gap-2 text-slate-400">
+                    <Tag size={12} />
+                    <span className="truncate">{person.inquadramento}</span>
+                  </div>
+                )}
+                {person.appartenenza && (
+                  <div className="flex items-center gap-2 text-slate-400">
+                    <Building2 size={12} />
+                    <span className="truncate">{person.appartenenza}</span>
+                  </div>
+                )}
                 {person.email && (
                   <div className="flex items-center gap-2 text-slate-400">
                     <Mail size={12} />
                     <span className="truncate">{person.email}</span>
                   </div>
                 )}
-                {person.daily_rate > 0 && (
+                {person.hourly_rate > 0 && (
                   <div className="flex items-center gap-2 text-slate-400">
                     <DollarSign size={12} />
-                    <span>€{person.daily_rate.toLocaleString('it-IT')}/giorno</span>
+                    <span>€{person.hourly_rate.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/ora</span>
+                    <span className="text-slate-600">·</span>
+                    <span>€{person.daily_rate.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/giorno</span>
                   </div>
                 )}
               </div>
