@@ -3,11 +3,12 @@ import { useStore } from '../../store/useStore'
 import { Allocation } from '../../types'
 import Modal from '../ui/Modal'
 import AllocationForm from './AllocationForm'
-import { Plus, Pencil, Trash2, CalendarDays, LayoutGrid } from 'lucide-react'
+import GanttView from './GanttView'
+import { Plus, Pencil, Trash2, CalendarDays, LayoutGrid, GanttChartSquare } from 'lucide-react'
 import { format, parseISO, addMonths, startOfMonth } from 'date-fns'
 import { it } from 'date-fns/locale'
 
-type View = 'table' | 'matrix'
+type View = 'table' | 'matrix' | 'gantt'
 
 export default function AllocationsPage() {
   const { allocations, people, projects, createAllocation, updateAllocation, deleteAllocation } = useStore()
@@ -50,6 +51,12 @@ export default function AllocationsPage() {
         <div className="flex items-center gap-3">
           {/* View toggle */}
           <div className="flex bg-slate-800 border border-slate-700 rounded-lg p-1 gap-1">
+            <button onClick={() => setView('gantt')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+                view === 'gantt' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
+              }`}>
+              <GanttChartSquare size={13} /> Gantt
+            </button>
             <button onClick={() => setView('matrix')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-colors ${
                 view === 'matrix' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
@@ -68,6 +75,9 @@ export default function AllocationsPage() {
           </button>
         </div>
       </div>
+
+      {/* Gantt View */}
+      {view === 'gantt' && <GanttView />}
 
       {/* Matrix View */}
       {view === 'matrix' && (
