@@ -54,6 +54,16 @@ function registerHandlers() {
 
   ipcMain.handle('db:getSettings', () => db.getSettings())
   ipcMain.handle('db:updateSettings', (_, data) => db.updateSettings(data))
+
+  ipcMain.handle('db:getHolidays', () => db.getHolidays())
+  ipcMain.handle('db:createHoliday', (_, data) => db.createHoliday(data))
+  ipcMain.handle('db:updateHoliday', (_, id, data) => db.updateHoliday(id, data))
+  ipcMain.handle('db:deleteHoliday', (_, id) => db.deleteHoliday(id))
+
+  ipcMain.handle('db:getLeaves', () => db.getLeaves())
+  ipcMain.handle('db:createLeave', (_, data) => db.createLeave(data))
+  ipcMain.handle('db:updateLeave', (_, id, data) => db.updateLeave(id, data))
+  ipcMain.handle('db:deleteLeave', (_, id) => db.deleteLeave(id))
 }
 
 app.whenReady().then(() => {

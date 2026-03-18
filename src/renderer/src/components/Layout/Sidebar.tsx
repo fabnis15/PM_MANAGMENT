@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, FolderKanban, Users, CalendarDays,
-  Bell, Settings, Briefcase
+  Bell, Settings, Briefcase, CalendarOff
 } from 'lucide-react'
 import { useStore } from '../../store/useStore'
 
@@ -10,6 +10,7 @@ const links = [
   { to: '/projects', icon: FolderKanban, label: 'Progetti' },
   { to: '/people', icon: Users, label: 'Persone' },
   { to: '/allocations', icon: CalendarDays, label: 'Allocazioni' },
+  { to: '/calendar', icon: CalendarOff, label: 'Calendario' },
   { to: '/alerts', icon: Bell, label: 'Alert' },
 ]
 

@@ -7,6 +7,7 @@ import PeoplePage from './components/People/PeoplePage'
 import AllocationsPage from './components/Allocations/AllocationsPage'
 import AlertsPage from './components/Alerts/AlertsPage'
 import SettingsPage from './components/Settings/SettingsPage'
+import CalendarPage from './components/Calendar/CalendarPage'
 import { useStore } from './store/useStore'
 
 export default function App() {
@@ -24,6 +25,7 @@ export default function App() {
         <Route path="/projects" element={<ProjectsPage />} />
         <Route path="/people" element={<PeoplePage />} />
         <Route path="/allocations" element={<AllocationsPage />} />
+        <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/alerts" element={<AlertsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Routes>

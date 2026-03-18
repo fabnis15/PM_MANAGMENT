@@ -66,6 +66,31 @@ export interface Settings {
   working_hours_per_day: number
 }
 
+export interface Holiday {
+  id: number
+  name: string
+  date: string        // YYYY-MM-DD (anno di riferimento per le ricorrenti)
+  type: 'national' | 'company'
+  recurring: number   // 1 = annuale (stesso MM-DD ogni anno)
+  active: number      // 1 = attiva
+  created_at: string
+}
+
+export type LeaveType = 'ferie' | 'permesso' | 'malattia' | 'altro'
+
+export interface Leave {
+  id: number
+  person_id: number
+  start_date: string
+  end_date: string
+  type: LeaveType
+  notes: string
+  created_at: string
+  // joined
+  person_name?: string
+  person_color?: string
+}
+
 export type AlertSeverity = 'error' | 'warning' | 'info'
 export type AlertType = 'overallocation' | 'budget' | 'deadline' | 'milestone'
 
@@ -106,6 +131,16 @@ declare global {
 
       getSettings: () => Promise<Settings>
       updateSettings: (d: Partial<Settings>) => Promise<Settings>
+
+      getHolidays: () => Promise<Holiday[]>
+      createHoliday: (d: Omit<Holiday, 'id' | 'created_at'>) => Promise<Holiday>
+      updateHoliday: (id: number, d: Omit<Holiday, 'id' | 'created_at'>) => Promise<Holiday>
+      deleteHoliday: (id: number) => Promise<{ success: boolean }>
+
+      getLeaves: () => Promise<Leave[]>
+      createLeave: (d: Omit<Leave, 'id' | 'created_at' | 'person_name' | 'person_color'>) => Promise<Leave>
+      updateLeave: (id: number, d: Omit<Leave, 'id' | 'created_at' | 'person_name' | 'person_color'>) => Promise<Leave>
+      deleteLeave: (id: number) => Promise<{ success: boolean }>
     }
   }
 }

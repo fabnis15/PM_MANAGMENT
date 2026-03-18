@@ -1,13 +1,32 @@
 import { create } from 'zustand'
-import { Person, Project, Allocation, Milestone, Settings, Alert } from '../types'
+import { Person, Project, Allocation, Milestone, Settings, Alert, Holiday, Leave } from '../types'
 
-function getWorkingDays(start: string, end: string): number {
+export function getWorkingDays(
+  start: string,
+  end: string,
+  holidays: Holiday[] = [],
+  personLeaves: Leave[] = []
+): number {
   const s = new Date(start), e = new Date(end)
+  if (s > e) return 0
   let count = 0
   const cur = new Date(s)
   while (cur <= e) {
-    const d = cur.getDay()
-    if (d !== 0 && d !== 6) count++
+    const day = cur.getDay()
+    if (day !== 0 && day !== 6) {
+      const mm = cur.getMonth() + 1
+      const dd = cur.getDate()
+      const dateStr = `${cur.getFullYear()}-${String(mm).padStart(2,'0')}-${String(dd).padStart(2,'0')}`
+      const isHoliday = holidays.some(h => {
+        if (!h.active) return false
+        const hd = new Date(h.date)
+        return h.recurring
+          ? hd.getMonth() + 1 === mm && hd.getDate() === dd
+          : h.date === dateStr
+      })
+      const onLeave = personLeaves.some(l => dateStr >= l.start_date && dateStr <= l.end_date)
+      if (!isHoliday && !onLeave) count++
+    }
     cur.setDate(cur.getDate() + 1)
   }
   return count
@@ -26,7 +45,9 @@ function computeAlerts(
   projects: Project[],
   allocations: Allocation[],
   milestones: Milestone[],
-  settings: Settings
+  settings: Settings,
+  holidays: Holiday[],
+  leaves: Leave[]
 ): Alert[] {
   const alerts: Alert[] = []
   const today = new Date()
@@ -63,7 +84,8 @@ function computeAlerts(
     const estimatedCost = pa.reduce((sum, a) => {
       const person = people.find(p => p.id === a.person_id)
       if (!person) return sum
-      return sum + getWorkingDays(a.start_date, a.end_date) * person.daily_rate * (a.percentage / 100)
+      const personLeaves = leaves.filter(l => l.person_id === a.person_id)
+      return sum + getWorkingDays(a.start_date, a.end_date, holidays, personLeaves) * person.daily_rate * (a.percentage / 100)
     }, 0)
     const pct = (estimatedCost / project.budget_total) * 100
     if (pct >= settings.budget_warning_threshold) {
@@ -137,11 +159,21 @@ interface Store {
   allocations: Allocation[]
   milestones: Milestone[]
   settings: Settings
+  holidays: Holiday[]
+  leaves: Leave[]
   alerts: Alert[]
   loading: boolean
 
   loadAll: () => Promise<void>
   refreshAlerts: () => void
+
+  createHoliday: (d: Omit<Holiday, 'id' | 'created_at'>) => Promise<void>
+  updateHoliday: (id: number, d: Omit<Holiday, 'id' | 'created_at'>) => Promise<void>
+  deleteHoliday: (id: number) => Promise<void>
+
+  createLeave: (d: Omit<Leave, 'id' | 'created_at' | 'person_name' | 'person_color'>) => Promise<void>
+  updateLeave: (id: number, d: Omit<Leave, 'id' | 'created_at' | 'person_name' | 'person_color'>) => Promise<void>
+  deleteLeave: (id: number) => Promise<void>
 
   createPerson: (d: Omit<Person, 'id' | 'created_at'>) => Promise<void>
   updatePerson: (id: number, d: Omit<Person, 'id' | 'created_at'>) => Promise<void>
@@ -168,26 +200,30 @@ export const useStore = create<Store>((set, get) => ({
   allocations: [],
   milestones: [],
   settings: defaultSettings,
+  holidays: [],
+  leaves: [],
   alerts: [],
   loading: false,
 
   refreshAlerts: () => {
-    const { people, projects, allocations, milestones, settings } = get()
-    set({ alerts: computeAlerts(people, projects, allocations, milestones, settings) })
+    const { people, projects, allocations, milestones, settings, holidays, leaves } = get()
+    set({ alerts: computeAlerts(people, projects, allocations, milestones, settings, holidays, leaves) })
   },
 
   loadAll: async () => {
     set({ loading: true })
-    const [people, projects, allocations, milestones, settings] = await Promise.all([
+    const [people, projects, allocations, milestones, settings, holidays, leaves] = await Promise.all([
       window.api.getPeople(),
       window.api.getProjects(),
       window.api.getAllocations(),
       window.api.getMilestones(),
-      window.api.getSettings()
+      window.api.getSettings(),
+      window.api.getHolidays(),
+      window.api.getLeaves(),
     ])
     const s = settings as unknown as Settings
-    const alerts = computeAlerts(people, projects, allocations, milestones, s)
-    set({ people, projects, allocations, milestones, settings: s, alerts, loading: false })
+    const alerts = computeAlerts(people, projects, allocations, milestones, s, holidays, leaves)
+    set({ people, projects, allocations, milestones, settings: s, holidays, leaves, alerts, loading: false })
   },
 
   // ── People
@@ -270,5 +306,39 @@ export const useStore = create<Store>((set, get) => ({
     const s = await window.api.updateSettings(d)
     set({ settings: s as unknown as Settings })
     get().refreshAlerts()
-  }
+  },
+
+  // ── Holidays
+  createHoliday: async (d) => {
+    const h = await window.api.createHoliday(d)
+    set(s => ({ holidays: [...s.holidays, h] }))
+    get().refreshAlerts()
+  },
+  updateHoliday: async (id, d) => {
+    const h = await window.api.updateHoliday(id, d)
+    set(s => ({ holidays: s.holidays.map(x => x.id === id ? h : x) }))
+    get().refreshAlerts()
+  },
+  deleteHoliday: async (id) => {
+    await window.api.deleteHoliday(id)
+    set(s => ({ holidays: s.holidays.filter(x => x.id !== id) }))
+    get().refreshAlerts()
+  },
+
+  // ── Leaves
+  createLeave: async (d) => {
+    const l = await window.api.createLeave(d)
+    set(s => ({ leaves: [...s.leaves, l] }))
+    get().refreshAlerts()
+  },
+  updateLeave: async (id, d) => {
+    const l = await window.api.updateLeave(id, d)
+    set(s => ({ leaves: s.leaves.map(x => x.id === id ? l : x) }))
+    get().refreshAlerts()
+  },
+  deleteLeave: async (id) => {
+    await window.api.deleteLeave(id)
+    set(s => ({ leaves: s.leaves.filter(x => x.id !== id) }))
+    get().refreshAlerts()
+  },
 }))

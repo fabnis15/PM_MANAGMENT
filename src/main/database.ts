@@ -12,7 +12,9 @@ function getDb(): Database.Database {
     db.pragma('foreign_keys = ON')
     initSchema()
     migrate()
+    initCalendarSchema()
     seedDefaultSettings()
+    seedHolidays()
   }
   return db
 }
@@ -90,6 +92,82 @@ function migrate() {
   }
   if (!projCols.includes('tipo_attivita')) {
     getDb().exec("ALTER TABLE projects ADD COLUMN tipo_attivita TEXT DEFAULT ''")
+  }
+}
+
+// ── Schema festività e assenze ───────────────────────────────────────────────
+
+function initCalendarSchema() {
+  getDb().exec(`
+    CREATE TABLE IF NOT EXISTS holidays (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      date TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'national',
+      recurring INTEGER DEFAULT 1,
+      active INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS leaves (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      person_id INTEGER NOT NULL,
+      start_date TEXT NOT NULL,
+      end_date TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'ferie',
+      notes TEXT DEFAULT '',
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (person_id) REFERENCES people(id) ON DELETE CASCADE
+    );
+  `)
+}
+
+function easterDate(year: number): Date {
+  const a = year % 19, b = Math.floor(year / 100), c = year % 100
+  const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25)
+  const g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30
+  const i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7
+  const m = Math.floor((a + 11 * h + 22 * l) / 451)
+  const month = Math.floor((h + l - 7 * m + 114) / 31)
+  const day = ((h + l - 7 * m + 114) % 31) + 1
+  return new Date(year, month - 1, day)
+}
+
+function pad(n: number) { return String(n).padStart(2, '0') }
+
+function seedHolidays() {
+  const count = (getDb().prepare('SELECT COUNT(*) as n FROM holidays').get() as { n: number }).n
+  if (count > 0) return
+
+  const fixed = [
+    ['Capodanno', '01-01'],
+    ['Epifania', '01-06'],
+    ['Festa della Liberazione', '04-25'],
+    ['Festa del Lavoro', '05-01'],
+    ['Festa della Repubblica', '06-02'],
+    ['Ferragosto', '08-15'],
+    ['Ognissanti', '11-01'],
+    ['Immacolata Concezione', '12-08'],
+    ['Natale', '12-25'],
+    ['Santo Stefano', '12-26'],
+  ]
+  const stmt = getDb().prepare(
+    "INSERT INTO holidays (name, date, type, recurring, active) VALUES (?, ?, 'national', 1, 1)"
+  )
+  const year = new Date().getFullYear()
+  for (const [name, mmdd] of fixed) {
+    stmt.run(name, `${year}-${mmdd}`)
+  }
+  // Pasqua e Pasquetta per anno corrente e successivo
+  const stmtFixed = getDb().prepare(
+    "INSERT INTO holidays (name, date, type, recurring, active) VALUES (?, ?, 'national', 0, 1)"
+  )
+  for (const y of [year, year + 1]) {
+    const easter = easterDate(y)
+    const pasqua = `${y}-${pad(easter.getMonth() + 1)}-${pad(easter.getDate())}`
+    const mon = new Date(easter); mon.setDate(mon.getDate() + 1)
+    const pasquetta = `${y}-${pad(mon.getMonth() + 1)}-${pad(mon.getDate())}`
+    stmtFixed.run(`Pasqua ${y}`, pasqua)
+    stmtFixed.run(`Pasquetta ${y}`, pasquetta)
   }
 }
 
@@ -233,4 +311,64 @@ export function updateSettings(data: Record<string, string | number>) {
   const stmt = getDb().prepare('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)')
   for (const [k, v] of Object.entries(data)) stmt.run(k, String(v))
   return getSettings()
+}
+
+// ── Holidays ──────────────────────────────────────────────────────────────────
+
+export function getHolidays() {
+  return getDb().prepare('SELECT * FROM holidays ORDER BY date').all()
+}
+
+export function createHoliday(data: Record<string, unknown>) {
+  const r = getDb()
+    .prepare('INSERT INTO holidays (name,date,type,recurring,active) VALUES (@name,@date,@type,@recurring,@active)')
+    .run({ ...data, recurring: data.recurring ? 1 : 0, active: data.active !== false ? 1 : 0 })
+  return getDb().prepare('SELECT * FROM holidays WHERE id=?').get(r.lastInsertRowid)
+}
+
+export function updateHoliday(id: number, data: Record<string, unknown>) {
+  getDb()
+    .prepare('UPDATE holidays SET name=@name,date=@date,type=@type,recurring=@recurring,active=@active WHERE id=@id')
+    .run({ ...data, recurring: data.recurring ? 1 : 0, active: data.active ? 1 : 0, id })
+  return getDb().prepare('SELECT * FROM holidays WHERE id=?').get(id)
+}
+
+export function deleteHoliday(id: number) {
+  getDb().prepare('DELETE FROM holidays WHERE id=?').run(id)
+  return { success: true }
+}
+
+// ── Leaves ────────────────────────────────────────────────────────────────────
+
+export function getLeaves() {
+  return getDb().prepare(`
+    SELECT l.*, p.name as person_name, p.color as person_color
+    FROM leaves l JOIN people p ON l.person_id = p.id
+    ORDER BY l.start_date DESC
+  `).all()
+}
+
+export function createLeave(data: Record<string, unknown>) {
+  const r = getDb()
+    .prepare('INSERT INTO leaves (person_id,start_date,end_date,type,notes) VALUES (@person_id,@start_date,@end_date,@type,@notes)')
+    .run(data)
+  return getDb().prepare(`
+    SELECT l.*, p.name as person_name, p.color as person_color
+    FROM leaves l JOIN people p ON l.person_id = p.id WHERE l.id=?
+  `).get(r.lastInsertRowid)
+}
+
+export function updateLeave(id: number, data: Record<string, unknown>) {
+  getDb()
+    .prepare('UPDATE leaves SET person_id=@person_id,start_date=@start_date,end_date=@end_date,type=@type,notes=@notes WHERE id=@id')
+    .run({ ...data, id })
+  return getDb().prepare(`
+    SELECT l.*, p.name as person_name, p.color as person_color
+    FROM leaves l JOIN people p ON l.person_id = p.id WHERE l.id=?
+  `).get(id)
+}
+
+export function deleteLeave(id: number) {
+  getDb().prepare('DELETE FROM leaves WHERE id=?').run(id)
+  return { success: true }
 }

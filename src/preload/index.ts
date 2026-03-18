@@ -22,7 +22,17 @@ const api = {
   deleteMilestone: (id: number) => ipcRenderer.invoke('db:deleteMilestone', id),
 
   getSettings: () => ipcRenderer.invoke('db:getSettings'),
-  updateSettings: (d: unknown) => ipcRenderer.invoke('db:updateSettings', d)
+  updateSettings: (d: unknown) => ipcRenderer.invoke('db:updateSettings', d),
+
+  getHolidays: () => ipcRenderer.invoke('db:getHolidays'),
+  createHoliday: (d: unknown) => ipcRenderer.invoke('db:createHoliday', d),
+  updateHoliday: (id: number, d: unknown) => ipcRenderer.invoke('db:updateHoliday', id, d),
+  deleteHoliday: (id: number) => ipcRenderer.invoke('db:deleteHoliday', id),
+
+  getLeaves: () => ipcRenderer.invoke('db:getLeaves'),
+  createLeave: (d: unknown) => ipcRenderer.invoke('db:createLeave', d),
+  updateLeave: (id: number, d: unknown) => ipcRenderer.invoke('db:updateLeave', id, d),
+  deleteLeave: (id: number) => ipcRenderer.invoke('db:deleteLeave', id),
 }
 
 contextBridge.exposeInMainWorld('api', api)
