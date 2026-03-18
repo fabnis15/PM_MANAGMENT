@@ -1,0 +1,50 @@
+{
+  "name": "pm-management",
+  "version": "1.0.0",
+  "description": "People & Project Manager - Desktop App",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "package": "npm run build && electron-builder",
+    "rebuild": "npx @electron/rebuild -f -w better-sqlite3",
+    "setup": "npm install --ignore-scripts && node node_modules/electron/install.js && npx @electron/rebuild -f -w better-sqlite3"
+  },
+  "dependencies": {
+    "better-sqlite3": "^9.4.3",
+    "date-fns": "^3.3.1",
+    "lucide-react": "^0.344.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.22.1",
+    "recharts": "^2.12.2",
+    "zustand": "^4.5.1"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^3.6.0",
+    "@types/better-sqlite3": "^7.6.8",
+    "@types/node": "^20.11.20",
+    "@types/react": "^18.2.57",
+    "@types/react-dom": "^18.2.19",
+    "@vitejs/plugin-react": "^4.2.1",
+    "autoprefixer": "^10.4.18",
+    "electron": "^29.1.0",
+    "electron-builder": "^24.9.1",
+    "electron-vite": "^2.0.0",
+    "postcss": "^8.4.35",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5.3.3",
+    "vite": "^5.1.4"
+  },
+  "build": {
+    "appId": "com.pmmanagement.app",
+    "productName": "PM Management",
+    "directories": { "output": "dist" },
+    "files": ["out/**/*", "node_modules/**/*"],
+    "asarUnpack": ["node_modules/better-sqlite3/**/*"],
+    "win": { "target": "nsis" },
+    "mac": { "target": "dmg" },
+    "linux": { "target": "AppImage" }
+  }
+}
