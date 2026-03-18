@@ -102,7 +102,17 @@ export default function ProjectsPage() {
                       {STATUS_LABELS[project.status]}
                     </span>
                   </div>
-                  {project.client && <div className="text-xs text-slate-400 mt-0.5">{project.client}</div>}
+                  <div className="flex items-center gap-3 mt-0.5 flex-wrap">
+                    {project.client && <span className="text-xs text-slate-400">{project.client}</span>}
+                    {project.wbs_opx && (
+                      <span className="text-xs px-1.5 py-0.5 rounded bg-slate-700 text-slate-300 font-mono">
+                        {project.wbs_opx}
+                      </span>
+                    )}
+                    {project.tipo_attivita && (
+                      <span className="text-xs text-slate-500">{project.tipo_attivita}</span>
+                    )}
+                  </div>
                 </div>
 
                 {/* Meta */}

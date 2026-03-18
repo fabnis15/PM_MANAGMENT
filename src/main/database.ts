@@ -83,6 +83,14 @@ function migrate() {
   if (!columns.includes('appartenenza')) {
     getDb().exec("ALTER TABLE people ADD COLUMN appartenenza TEXT DEFAULT ''")
   }
+  // Projects migrations
+  const projCols = (getDb().prepare("PRAGMA table_info(projects)").all() as { name: string }[]).map(c => c.name)
+  if (!projCols.includes('wbs_opx')) {
+    getDb().exec("ALTER TABLE projects ADD COLUMN wbs_opx TEXT DEFAULT ''")
+  }
+  if (!projCols.includes('tipo_attivita')) {
+    getDb().exec("ALTER TABLE projects ADD COLUMN tipo_attivita TEXT DEFAULT ''")
+  }
 }
 
 function seedDefaultSettings() {
@@ -130,14 +138,14 @@ export function getProjects() {
 
 export function createProject(data: Record<string, unknown>) {
   const r = getDb()
-    .prepare('INSERT INTO projects (name,client,description,start_date,end_date,status,budget_total,color) VALUES (@name,@client,@description,@start_date,@end_date,@status,@budget_total,@color)')
+    .prepare('INSERT INTO projects (name,client,wbs_opx,tipo_attivita,description,start_date,end_date,status,budget_total,color) VALUES (@name,@client,@wbs_opx,@tipo_attivita,@description,@start_date,@end_date,@status,@budget_total,@color)')
     .run(data)
   return getDb().prepare('SELECT * FROM projects WHERE id=?').get(r.lastInsertRowid)
 }
 
 export function updateProject(id: number, data: Record<string, unknown>) {
   getDb()
-    .prepare('UPDATE projects SET name=@name,client=@client,description=@description,start_date=@start_date,end_date=@end_date,status=@status,budget_total=@budget_total,color=@color WHERE id=@id')
+    .prepare('UPDATE projects SET name=@name,client=@client,wbs_opx=@wbs_opx,tipo_attivita=@tipo_attivita,description=@description,start_date=@start_date,end_date=@end_date,status=@status,budget_total=@budget_total,color=@color WHERE id=@id')
     .run({ ...data, id })
   return getDb().prepare('SELECT * FROM projects WHERE id=?').get(id)
 }

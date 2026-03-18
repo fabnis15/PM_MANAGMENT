@@ -22,6 +22,8 @@ export default function ProjectForm({ initial, onSave, onCancel }: Props) {
   const [form, setForm] = useState<FormData>({
     name: initial?.name ?? '',
     client: initial?.client ?? '',
+    wbs_opx: initial?.wbs_opx ?? '',
+    tipo_attivita: initial?.tipo_attivita ?? '',
     description: initial?.description ?? '',
     start_date: initial?.start_date ?? '',
     end_date: initial?.end_date ?? '',
@@ -48,6 +50,16 @@ export default function ProjectForm({ initial, onSave, onCancel }: Props) {
         <div>
           <label className="label">Cliente</label>
           <input className="input" value={form.client} onChange={e => set('client', e.target.value)} />
+        </div>
+        <div>
+          <label className="label">WBS / OPX</label>
+          <input className="input" value={form.wbs_opx} onChange={e => set('wbs_opx', e.target.value)}
+            placeholder="es. WBS-2024-001, OPX-IT-042…" />
+        </div>
+        <div>
+          <label className="label">Tipo di attività</label>
+          <input className="input" value={form.tipo_attivita} onChange={e => set('tipo_attivita', e.target.value)}
+            placeholder="es. Sviluppo, Consulenza, Manutenzione…" />
         </div>
         <div>
           <label className="label">Stato</label>

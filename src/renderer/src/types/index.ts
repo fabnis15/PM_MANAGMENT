@@ -17,6 +17,8 @@ export interface Project {
   id: number
   name: string
   client: string
+  wbs_opx: string       // codice WBS / OPX
+  tipo_attivita: string // es. Sviluppo, Consulenza, Manutenzione, Formazione…
   description: string
   start_date: string
   end_date: string
