@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useStore } from '../../store/useStore'
 import {
   addMonths, startOfMonth, endOfMonth, eachMonthOfInterval,
-  differenceInDays, parseISO, format, isWithinInterval, isSameMonth
+  differenceInDays, parseISO, format, isSameMonth
 } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react'
@@ -17,6 +17,8 @@ interface GanttItem {
   start_date: string
   end_date: string
   percentage: number
+  allocation_type: 'percentage' | 'days'
+  allocated_days: number
   lane: number
 }
 
@@ -28,7 +30,6 @@ interface GanttRow {
   lanes: number
 }
 
-// Assign items to non-overlapping lanes
 function assignLanes(items: Omit<GanttItem, 'lane'>[]): GanttItem[] {
   const sorted = [...items].sort((a, b) => a.start_date.localeCompare(b.start_date))
   const laneEnds: string[] = []
@@ -40,7 +41,11 @@ function assignLanes(items: Omit<GanttItem, 'lane'>[]): GanttItem[] {
   })
 }
 
-export default function GanttView() {
+interface Props {
+  onEdit?: (allocationId: number) => void
+}
+
+export default function GanttView({ onEdit }: Props) {
   const { allocations, people, projects } = useStore()
   const [groupBy, setGroupBy] = useState<GroupBy>('person')
   const [zoom, setZoom] = useState<Zoom>(6)
@@ -79,6 +84,8 @@ export default function GanttView() {
             start_date: a.start_date,
             end_date: a.end_date,
             percentage: a.percentage,
+            allocation_type: a.allocation_type || 'percentage' as const,
+            allocated_days: a.allocated_days || 0,
           }))
         const items = assignLanes(raw)
         return { id: person.id, name: person.name, color: person.color, items, lanes: Math.max(1, ...items.map(i => i.lane + 1), 1) }
@@ -96,6 +103,8 @@ export default function GanttView() {
               start_date: a.start_date,
               end_date: a.end_date,
               percentage: a.percentage,
+              allocation_type: a.allocation_type || 'percentage' as const,
+              allocated_days: a.allocated_days || 0,
             }))
           const items = assignLanes(raw)
           return { id: project.id, name: project.name, color: project.color, items, lanes: Math.max(1, ...items.map(i => i.lane + 1), 1) }
@@ -110,7 +119,6 @@ export default function GanttView() {
     <div className="space-y-3">
       {/* Toolbar */}
       <div className="flex items-center gap-3 flex-wrap">
-        {/* GroupBy */}
         <div className="flex bg-slate-700/60 border border-slate-600 rounded-lg p-1 gap-1">
           {(['person', 'project'] as GroupBy[]).map(g => (
             <button key={g} onClick={() => setGroupBy(g)}
@@ -122,7 +130,6 @@ export default function GanttView() {
           ))}
         </div>
 
-        {/* Zoom */}
         <div className="flex bg-slate-700/60 border border-slate-600 rounded-lg p-1 gap-1">
           {([3, 6, 12] as Zoom[]).map(z => (
             <button key={z} onClick={() => setZoom(z)}
@@ -134,7 +141,6 @@ export default function GanttView() {
           ))}
         </div>
 
-        {/* Navigation */}
         <div className="flex items-center gap-1">
           <button className="btn-ghost p-1.5" onClick={() => setViewStart(s => addMonths(s, -Math.floor(zoom / 2)))}>
             <ChevronLeft size={15} />
@@ -151,6 +157,10 @@ export default function GanttView() {
           onClick={() => setViewStart(startOfMonth(today))}>
           <Calendar size={13} /> Oggi
         </button>
+
+        {onEdit && (
+          <span className="text-xs text-slate-500 ml-2">Clicca su una barra per modificarla</span>
+        )}
       </div>
 
       {/* Gantt chart */}
@@ -192,36 +202,38 @@ export default function GanttView() {
                 const rowH = row.lanes * LANE_H + ROW_PAD * 2
                 return (
                   <div key={row.id} className="flex border-b border-slate-700/40 hover:bg-slate-700/10 transition-colors">
-                    {/* Label */}
                     <div className="w-44 flex-shrink-0 flex items-center gap-2 px-4 border-r border-slate-700/60"
                       style={{ minHeight: rowH }}>
                       <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: row.color }} />
                       <span className="text-xs text-slate-300 truncate">{row.name}</span>
                     </div>
 
-                    {/* Timeline */}
                     <div className="flex-1 relative" style={{ height: rowH }}>
-
-                      {/* Month grid lines */}
                       {months.map((_, i) => i > 0 && (
                         <div key={i} className="absolute top-0 bottom-0 border-l border-slate-700/30"
                           style={{ left: `${(i / zoom) * 100}%` }} />
                       ))}
 
-                      {/* Today line */}
                       {todayPct !== null && (
                         <div className="absolute top-0 bottom-0 w-px bg-red-400/70 z-10"
                           style={{ left: `${todayPct}%` }} />
                       )}
 
-                      {/* Bars */}
                       {row.items.map(item => {
                         const style = getBarStyle(item.start_date, item.end_date)
                         if (!style) return null
                         const top = ROW_PAD + item.lane * LANE_H
+                        const isDays = item.allocation_type === 'days'
+                        const barLabel = isDays
+                          ? `${item.label} — ${item.allocated_days}gg`
+                          : `${item.label} ${item.percentage}%`
+                        const tooltipDetail = isDays
+                          ? `${item.allocated_days} giorni · ${item.start_date} → ${item.end_date}`
+                          : `${item.percentage}% · ${item.start_date} → ${item.end_date}`
+
                         return (
                           <div key={item.id}
-                            className="absolute rounded flex items-center overflow-hidden cursor-default group"
+                            className={`absolute rounded flex items-center overflow-hidden group ${onEdit ? 'cursor-pointer hover:brightness-110' : 'cursor-default'}`}
                             style={{
                               ...style,
                               top,
@@ -229,14 +241,21 @@ export default function GanttView() {
                               background: item.color + 'cc',
                               border: `1px solid ${item.color}`,
                             }}
-                            title={`${item.label}\n${item.percentage}% · ${item.start_date} → ${item.end_date}`}>
+                            onClick={() => onEdit?.(item.id)}
+                            title={barLabel}>
                             <span className="px-1.5 text-xs text-white font-medium truncate leading-none select-none">
-                              {item.label} <span className="opacity-70">{item.percentage}%</span>
+                              {item.label}
+                              {' '}
+                              <span className="opacity-70">
+                                {isDays ? `${item.allocated_days}gg` : `${item.percentage}%`}
+                              </span>
                             </span>
                             {/* Tooltip */}
-                            <div className="hidden group-hover:flex absolute bottom-full left-0 mb-1 bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-xs text-white shadow-xl z-20 whitespace-nowrap flex-col gap-0.5">
+                            <div className="hidden group-hover:flex absolute bottom-full left-0 mb-1 bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-xs text-white shadow-xl z-20 whitespace-nowrap flex-col gap-0.5 pointer-events-none">
                               <span className="font-semibold">{item.label}</span>
-                              <span className="text-slate-400">{item.percentage}% · {item.start_date} → {item.end_date}</span>
+                              <span className="text-slate-400">{tooltipDetail}</span>
+                              {isDays && <span className="text-blue-400">Modalità: giorni fissi</span>}
+                              {onEdit && <span className="text-slate-500 mt-0.5">Clicca per modificare</span>}
                             </div>
                           </div>
                         )
@@ -246,7 +265,6 @@ export default function GanttView() {
                 )
               })}
 
-              {/* Legend: today */}
               {todayPct !== null && (
                 <div className="flex items-center gap-2 px-4 py-2 border-t border-slate-700/40">
                   <div className="w-3 h-px bg-red-400" />

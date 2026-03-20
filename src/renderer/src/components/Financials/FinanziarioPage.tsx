@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback } from 'react'
+import { differenceInCalendarDays } from 'date-fns'
 import { useStore, getWorkingDays } from '../../store/useStore'
 import { MonthlyRevenue } from '../../types'
 import {
@@ -109,14 +110,29 @@ export default function FinanziarioPage() {
         }
 
         if (person) {
-          const mStart = `${year}-${String(month).padStart(2, '0')}-01`
-          const lastDay = new Date(year, month, 0).getDate()
-          const mEnd = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
-          const effectiveStart = a.start_date > mStart ? a.start_date : mStart
-          const effectiveEnd = a.end_date < mEnd ? a.end_date : mEnd
-          const personLeaves = leaves.filter(l => l.person_id === a.person_id)
-          const days = getWorkingDays(effectiveStart, effectiveEnd, holidays, personLeaves)
-          const cost = days * person.daily_rate * (a.percentage / 100)
+          let cost = 0
+          if (a.allocation_type === 'days') {
+            // Distribuisce i giorni fissi proporzionalmente sui mesi dell'allocazione
+            const allocStart = new Date(a.start_date)
+            const allocEnd = new Date(a.end_date)
+            const totalAllocDays = differenceInCalendarDays(allocEnd, allocStart) + 1
+            const mStartDate = new Date(year, month - 1, 1)
+            const mEndDate = new Date(year, month, 0)
+            const overlapStart = allocStart > mStartDate ? allocStart : mStartDate
+            const overlapEnd = allocEnd < mEndDate ? allocEnd : mEndDate
+            const overlapDays = differenceInCalendarDays(overlapEnd, overlapStart) + 1
+            const fraction = totalAllocDays > 0 ? overlapDays / totalAllocDays : 0
+            cost = (a.allocated_days || 0) * person.daily_rate * fraction
+          } else {
+            const mStart = `${year}-${String(month).padStart(2, '0')}-01`
+            const lastDay = new Date(year, month, 0).getDate()
+            const mEnd = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+            const effectiveStart = a.start_date > mStart ? a.start_date : mStart
+            const effectiveEnd = a.end_date < mEnd ? a.end_date : mEnd
+            const personLeaves = leaves.filter(l => l.person_id === a.person_id)
+            const days = getWorkingDays(effectiveStart, effectiveEnd, holidays, personLeaves)
+            cost = days * person.daily_rate * (a.percentage / 100)
+          }
 
           const row = rowMap.get(key)!
           row.costi += cost

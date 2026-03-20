@@ -28,6 +28,8 @@ export interface Project {
   created_at: string
 }
 
+export type AllocationType = 'percentage' | 'days'
+
 export interface Allocation {
   id: number
   person_id: number
@@ -35,6 +37,8 @@ export interface Allocation {
   start_date: string
   end_date: string
   percentage: number
+  allocation_type: AllocationType
+  allocated_days: number
   notes: string
   created_at: string
   // joined

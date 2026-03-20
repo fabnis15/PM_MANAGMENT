@@ -20,7 +20,6 @@ export default function AllocationsPage() {
 
   const today = new Date()
 
-  // Matrix: 6 months from today
   const months = useMemo(() =>
     Array.from({ length: 6 }, (_, i) => {
       const d = startOfMonth(addMonths(today, i))
@@ -37,6 +36,11 @@ export default function AllocationsPage() {
     )
   }
 
+  const openEdit = (id: number) => {
+    const a = allocations.find(x => x.id === id)
+    if (a) setEditAlloc(a)
+  }
+
   const filteredAllocations = filterPerson === 'all'
     ? allocations
     : allocations.filter(a => a.person_id === filterPerson)
@@ -49,7 +53,6 @@ export default function AllocationsPage() {
           <p className="text-sm text-slate-400">{allocations.length} allocazioni totali</p>
         </div>
         <div className="flex items-center gap-3">
-          {/* View toggle */}
           <div className="flex bg-slate-800 border border-slate-700 rounded-lg p-1 gap-1">
             <button onClick={() => setView('gantt')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-colors ${
@@ -77,7 +80,7 @@ export default function AllocationsPage() {
       </div>
 
       {/* Gantt View */}
-      {view === 'gantt' && <GanttView />}
+      {view === 'gantt' && <GanttView onEdit={openEdit} />}
 
       {/* Matrix View */}
       {view === 'matrix' && (
@@ -125,9 +128,15 @@ export default function AllocationsPage() {
                             <div className={`text-xs font-semibold ${textColor}`}>{total}%</div>
                             <div className="space-y-0.5 mt-1">
                               {ma.map(a => (
-                                <div key={a.id} className="text-xs px-1.5 py-0.5 rounded text-slate-300 truncate max-w-[100px] mx-auto"
-                                  style={{ background: (a.project_color || '#3b82f6') + '30' }}>
-                                  {a.project_name?.split(' ')[0]} {a.percentage}%
+                                <div key={a.id}
+                                  className="text-xs px-1.5 py-0.5 rounded text-slate-300 truncate max-w-[100px] mx-auto cursor-pointer hover:brightness-125 transition-all"
+                                  style={{ background: (a.project_color || '#3b82f6') + '30' }}
+                                  onClick={() => openEdit(a.id)}
+                                  title="Clicca per modificare">
+                                  {a.project_name?.split(' ')[0]}{' '}
+                                  {a.allocation_type === 'days'
+                                    ? `${a.allocated_days}gg`
+                                    : `${a.percentage}%`}
                                 </div>
                               ))}
                             </div>
@@ -144,10 +153,9 @@ export default function AllocationsPage() {
         </div>
       )}
 
-      {/* Table View */}
+      {/* Table / Lista View */}
       {view === 'table' && (
         <div className="space-y-3">
-          {/* Filter */}
           <div className="flex items-center gap-3">
             <label className="text-xs text-slate-400">Filtra per persona:</label>
             <select className="input w-auto text-xs py-1.5" value={filterPerson}
@@ -164,7 +172,7 @@ export default function AllocationsPage() {
                   <th className="text-left px-4 py-3 text-slate-400 font-medium text-xs">Persona</th>
                   <th className="text-left px-4 py-3 text-slate-400 font-medium text-xs">Progetto</th>
                   <th className="text-left px-4 py-3 text-slate-400 font-medium text-xs">Periodo</th>
-                  <th className="text-center px-4 py-3 text-slate-400 font-medium text-xs">%</th>
+                  <th className="text-center px-4 py-3 text-slate-400 font-medium text-xs">Allocazione</th>
                   <th className="text-left px-4 py-3 text-slate-400 font-medium text-xs">Note</th>
                   <th className="px-4 py-3"></th>
                 </tr>
@@ -173,49 +181,58 @@ export default function AllocationsPage() {
                 {filteredAllocations.length === 0 && (
                   <tr><td colSpan={6} className="text-center py-10 text-slate-500 text-xs">Nessuna allocazione</td></tr>
                 )}
-                {filteredAllocations.map(a => (
-                  <tr key={a.id} className="border-b border-slate-700/50 last:border-0 hover:bg-slate-700/20">
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <div className="w-5 h-5 rounded-full text-xs font-bold flex items-center justify-center text-white flex-shrink-0"
-                          style={{ background: a.person_color || '#3b82f6' }}>
-                          {a.person_name?.[0]}
+                {filteredAllocations.map(a => {
+                  const isDays = a.allocation_type === 'days'
+                  return (
+                    <tr key={a.id} className="border-b border-slate-700/50 last:border-0 hover:bg-slate-700/20">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <div className="w-5 h-5 rounded-full text-xs font-bold flex items-center justify-center text-white flex-shrink-0"
+                            style={{ background: a.person_color || '#3b82f6' }}>
+                            {a.person_name?.[0]}
+                          </div>
+                          <span className="text-slate-300 text-xs">{a.person_name}</span>
                         </div>
-                        <span className="text-slate-300 text-xs">{a.person_name}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full flex-shrink-0"
-                          style={{ background: a.project_color || '#10b981' }} />
-                        <span className="text-slate-300 text-xs">{a.project_name}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-slate-400">
-                      {format(parseISO(a.start_date), 'dd/MM/yy')} → {format(parseISO(a.end_date), 'dd/MM/yy')}
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                        a.percentage > 100 ? 'bg-red-500/20 text-red-400' :
-                        a.percentage > 80 ? 'bg-amber-500/20 text-amber-400' :
-                        'bg-emerald-500/20 text-emerald-400'
-                      }`}>
-                        {a.percentage}%
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-slate-500 max-w-[150px] truncate">{a.notes || '—'}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1 justify-end">
-                        <button className="btn-ghost p-1.5" onClick={() => setEditAlloc(a)}>
-                          <Pencil size={12} />
-                        </button>
-                        <button className="btn-danger p-1.5" onClick={() => setConfirmDelete(a.id)}>
-                          <Trash2 size={12} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full flex-shrink-0"
+                            style={{ background: a.project_color || '#10b981' }} />
+                          <span className="text-slate-300 text-xs">{a.project_name}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-slate-400">
+                        {format(parseISO(a.start_date), 'dd/MM/yy')} → {format(parseISO(a.end_date), 'dd/MM/yy')}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        {isDays ? (
+                          <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400">
+                            {a.allocated_days} gg
+                          </span>
+                        ) : (
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                            a.percentage > 100 ? 'bg-red-500/20 text-red-400' :
+                            a.percentage > 80 ? 'bg-amber-500/20 text-amber-400' :
+                            'bg-emerald-500/20 text-emerald-400'
+                          }`}>
+                            {a.percentage}%
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-slate-500 max-w-[150px] truncate">{a.notes || '—'}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1 justify-end">
+                          <button className="btn-ghost p-1.5" onClick={() => setEditAlloc(a)}>
+                            <Pencil size={12} />
+                          </button>
+                          <button className="btn-danger p-1.5" onClick={() => setConfirmDelete(a.id)}>
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>

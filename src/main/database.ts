@@ -86,6 +86,14 @@ function migrate() {
   if (!columns.includes('appartenenza')) {
     getDb().exec("ALTER TABLE people ADD COLUMN appartenenza TEXT DEFAULT ''")
   }
+  // Allocations migrations
+  const allocCols = (getDb().prepare("PRAGMA table_info(allocations)").all() as { name: string }[]).map(c => c.name)
+  if (!allocCols.includes('allocation_type')) {
+    getDb().exec("ALTER TABLE allocations ADD COLUMN allocation_type TEXT DEFAULT 'percentage'")
+  }
+  if (!allocCols.includes('allocated_days')) {
+    getDb().exec('ALTER TABLE allocations ADD COLUMN allocated_days REAL DEFAULT 0')
+  }
   // Projects migrations
   const projCols = (getDb().prepare("PRAGMA table_info(projects)").all() as { name: string }[]).map(c => c.name)
   if (!projCols.includes('wbs_opx')) {
@@ -267,14 +275,14 @@ export function getAllocations() {
 
 export function createAllocation(data: Record<string, unknown>) {
   const r = getDb()
-    .prepare('INSERT INTO allocations (person_id,project_id,start_date,end_date,percentage,notes) VALUES (@person_id,@project_id,@start_date,@end_date,@percentage,@notes)')
+    .prepare('INSERT INTO allocations (person_id,project_id,start_date,end_date,percentage,allocation_type,allocated_days,notes) VALUES (@person_id,@project_id,@start_date,@end_date,@percentage,@allocation_type,@allocated_days,@notes)')
     .run(data)
   return getDb().prepare(`${ALLOC_JOIN} WHERE a.id=?`).get(r.lastInsertRowid)
 }
 
 export function updateAllocation(id: number, data: Record<string, unknown>) {
   getDb()
-    .prepare('UPDATE allocations SET person_id=@person_id,project_id=@project_id,start_date=@start_date,end_date=@end_date,percentage=@percentage,notes=@notes WHERE id=@id')
+    .prepare('UPDATE allocations SET person_id=@person_id,project_id=@project_id,start_date=@start_date,end_date=@end_date,percentage=@percentage,allocation_type=@allocation_type,allocated_days=@allocated_days,notes=@notes WHERE id=@id')
     .run({ ...data, id })
   return getDb().prepare(`${ALLOC_JOIN} WHERE a.id=?`).get(id)
 }

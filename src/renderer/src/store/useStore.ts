@@ -84,6 +84,9 @@ function computeAlerts(
     const estimatedCost = pa.reduce((sum, a) => {
       const person = people.find(p => p.id === a.person_id)
       if (!person) return sum
+      if (a.allocation_type === 'days') {
+        return sum + (a.allocated_days || 0) * person.daily_rate
+      }
       const personLeaves = leaves.filter(l => l.person_id === a.person_id)
       return sum + getWorkingDays(a.start_date, a.end_date, holidays, personLeaves) * person.daily_rate * (a.percentage / 100)
     }, 0)
