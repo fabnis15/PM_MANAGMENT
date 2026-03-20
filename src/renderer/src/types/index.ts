@@ -95,6 +95,17 @@ export interface Leave {
   person_color?: string
 }
 
+export interface WorkException {
+  id?: number
+  person_id: number
+  date: string       // YYYY-MM-DD
+  notes: string
+  created_at?: string
+  // joined
+  person_name?: string
+  person_color?: string
+}
+
 export interface MonthlyRevenue {
   id?: number
   project_id: number
@@ -161,6 +172,10 @@ declare global {
       getMonthlyRevenues: () => Promise<MonthlyRevenue[]>
       upsertMonthlyRevenue: (d: Omit<MonthlyRevenue, 'id' | 'created_at'>) => Promise<MonthlyRevenue>
       deleteMonthlyRevenue: (projectId: number, year: number, month: number) => Promise<{ success: boolean }>
+
+      getWorkExceptions: () => Promise<WorkException[]>
+      upsertWorkException: (d: Omit<WorkException, 'id' | 'created_at' | 'person_name' | 'person_color'>) => Promise<WorkException>
+      deleteWorkException: (personId: number, date: string) => Promise<{ success: boolean }>
     }
   }
 }

@@ -14,6 +14,7 @@ function getDb(): Database.Database {
     migrate()
     initCalendarSchema()
     initFinancialSchema()
+    initWorkExceptionsSchema()
     seedDefaultSettings()
     seedHolidays()
   }
@@ -105,6 +106,20 @@ function migrate() {
 }
 
 // ── Schema festività e assenze ───────────────────────────────────────────────
+
+function initWorkExceptionsSchema() {
+  getDb().exec(`
+    CREATE TABLE IF NOT EXISTS work_exceptions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      person_id INTEGER NOT NULL,
+      date TEXT NOT NULL,
+      notes TEXT DEFAULT '',
+      created_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(person_id, date),
+      FOREIGN KEY (person_id) REFERENCES people(id) ON DELETE CASCADE
+    );
+  `)
+}
 
 function initFinancialSchema() {
   getDb().exec(`
@@ -422,5 +437,33 @@ export function upsertMonthlyRevenue(data: Record<string, unknown>) {
 
 export function deleteMonthlyRevenue(projectId: number, year: number, month: number) {
   getDb().prepare('DELETE FROM monthly_revenue WHERE project_id=? AND year=? AND month=?').run(projectId, year, month)
+  return { success: true }
+}
+
+// ── Work Exceptions ───────────────────────────────────────────────────────────
+
+export function getWorkExceptions() {
+  return getDb().prepare(`
+    SELECT we.*, p.name as person_name, p.color as person_color
+    FROM work_exceptions we JOIN people p ON we.person_id = p.id
+    ORDER BY we.date, p.name
+  `).all()
+}
+
+export function upsertWorkException(data: Record<string, unknown>) {
+  getDb()
+    .prepare(`INSERT INTO work_exceptions (person_id, date, notes)
+              VALUES (@person_id, @date, @notes)
+              ON CONFLICT(person_id, date) DO UPDATE SET notes=@notes`)
+    .run(data)
+  return getDb().prepare(`
+    SELECT we.*, p.name as person_name, p.color as person_color
+    FROM work_exceptions we JOIN people p ON we.person_id = p.id
+    WHERE we.person_id=? AND we.date=?
+  `).get(data.person_id as number, data.date as string)
+}
+
+export function deleteWorkException(personId: number, date: string) {
+  getDb().prepare('DELETE FROM work_exceptions WHERE person_id=? AND date=?').run(personId, date)
   return { success: true }
 }

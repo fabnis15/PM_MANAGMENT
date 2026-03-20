@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { useStore } from '../../store/useStore'
 import { Holiday, Leave } from '../../types'
 import Modal from '../ui/Modal'
-import { Plus, Pencil, Trash2, CalendarDays, Users, Building2, Globe, CheckCircle2, XCircle } from 'lucide-react'
+import { Plus, Pencil, Trash2, CalendarDays, Users, Building2, Globe, CheckCircle2, XCircle, UserCheck } from 'lucide-react'
 import { format, parseISO, eachDayOfInterval } from 'date-fns'
 import { it } from 'date-fns/locale'
 
@@ -307,8 +307,8 @@ function LeaveForm({ initial, onSave, onCancel }: {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function CalendarPage() {
-  const { holidays, leaves, people, createHoliday, updateHoliday, deleteHoliday,
-    createLeave, updateLeave, deleteLeave } = useStore()
+  const { holidays, leaves, people, workExceptions, createHoliday, updateHoliday, deleteHoliday,
+    createLeave, updateLeave, deleteLeave, upsertWorkException, deleteWorkException } = useStore()
 
   const [tab, setTab] = useState<Tab>('holidays')
   const [showNewHoliday, setShowNewHoliday] = useState(false)
@@ -317,6 +317,7 @@ export default function CalendarPage() {
   const [editLeave, setEditLeave] = useState<Leave | null>(null)
   const [filterPerson, setFilterPerson] = useState<number | 'all'>('all')
   const [confirmDelete, setConfirmDelete] = useState<{ type: 'holiday' | 'leave'; id: number } | null>(null)
+  const [exceptionsHoliday, setExceptionsHoliday] = useState<Holiday | null>(null)
 
   const national = holidays.filter(h => h.type === 'national').sort((a, b) => a.date.localeCompare(b.date))
   const company = holidays.filter(h => h.type === 'company').sort((a, b) => a.date.localeCompare(b.date))
@@ -333,30 +334,48 @@ export default function CalendarPage() {
     setShowNewHoliday(false)
   }
 
-  const HolidayRow = ({ h }: { h: Holiday }) => (
-    <tr className="border-b border-slate-700/40 last:border-0 hover:bg-slate-700/20">
-      <td className="px-4 py-2.5 text-sm text-slate-300">{h.name}</td>
-      <td className="px-4 py-2.5 text-xs text-slate-400">
-        {format(parseISO(h.date), h.recurring ? 'dd MMMM' : 'dd MMMM yyyy', { locale: it })}
-      </td>
-      <td className="px-4 py-2.5 text-center">
-        {h.recurring ? <CheckCircle2 size={14} className="text-emerald-500 mx-auto" /> : <span className="text-slate-600 text-xs">—</span>}
-      </td>
-      <td className="px-4 py-2.5 text-center">
-        <button onClick={() => updateHoliday(h.id, { ...h, active: h.active ? 0 : 1 })}>
-          {h.active
-            ? <CheckCircle2 size={14} className="text-emerald-500 mx-auto" />
-            : <XCircle size={14} className="text-slate-600 mx-auto" />}
-        </button>
-      </td>
-      <td className="px-4 py-2.5">
-        <div className="flex items-center gap-1 justify-end">
-          <button className="btn-ghost p-1.5" onClick={() => setEditHoliday(h)}><Pencil size={12} /></button>
-          <button className="btn-danger p-1.5" onClick={() => setConfirmDelete({ type: 'holiday', id: h.id })}><Trash2 size={12} /></button>
-        </div>
-      </td>
-    </tr>
-  )
+  const HolidayRow = ({ h }: { h: Holiday }) => {
+    const exCount = workExceptions.filter(e => e.date === h.date).length
+    return (
+      <tr className="border-b border-slate-700/40 last:border-0 hover:bg-slate-700/20">
+        <td className="px-4 py-2.5 text-sm text-slate-300">{h.name}</td>
+        <td className="px-4 py-2.5 text-xs text-slate-400">
+          {format(parseISO(h.date), h.recurring ? 'dd MMMM' : 'dd MMMM yyyy', { locale: it })}
+        </td>
+        <td className="px-4 py-2.5 text-center">
+          {h.recurring ? <CheckCircle2 size={14} className="text-emerald-500 mx-auto" /> : <span className="text-slate-600 text-xs">—</span>}
+        </td>
+        <td className="px-4 py-2.5 text-center">
+          <button onClick={() => updateHoliday(h.id, { ...h, active: h.active ? 0 : 1 })}>
+            {h.active
+              ? <CheckCircle2 size={14} className="text-emerald-500 mx-auto" />
+              : <XCircle size={14} className="text-slate-600 mx-auto" />}
+          </button>
+        </td>
+        {/* Eccezioni — solo per chiusure aziendali */}
+        <td className="px-4 py-2.5 text-center">
+          {h.type === 'company' ? (
+            <button
+              className={`flex items-center gap-1 mx-auto text-xs rounded px-2 py-0.5 transition-colors ${
+                exCount > 0 ? 'bg-amber-500/20 text-amber-400 hover:bg-amber-500/30' : 'text-slate-600 hover:text-slate-400'
+              }`}
+              onClick={() => setExceptionsHoliday(h)}
+              title="Gestisci chi lavora questo giorno"
+            >
+              <UserCheck size={12} />
+              {exCount > 0 ? exCount : '+'}
+            </button>
+          ) : <span className="text-slate-700">—</span>}
+        </td>
+        <td className="px-4 py-2.5">
+          <div className="flex items-center gap-1 justify-end">
+            <button className="btn-ghost p-1.5" onClick={() => setEditHoliday(h)}><Pencil size={12} /></button>
+            <button className="btn-danger p-1.5" onClick={() => setConfirmDelete({ type: 'holiday', id: h.id })}><Trash2 size={12} /></button>
+          </div>
+        </td>
+      </tr>
+    )
+  }
 
   const tableHead = (
     <thead>
@@ -365,6 +384,7 @@ export default function CalendarPage() {
         <th className="text-left px-4 py-2.5 text-xs text-slate-400 font-medium">Data</th>
         <th className="text-center px-4 py-2.5 text-xs text-slate-400 font-medium">Ricorrente</th>
         <th className="text-center px-4 py-2.5 text-xs text-slate-400 font-medium">Attiva</th>
+        <th className="text-center px-4 py-2.5 text-xs text-slate-400 font-medium">Chi lavora</th>
         <th className="px-4 py-2.5"></th>
       </tr>
     </thead>
@@ -545,6 +565,52 @@ export default function CalendarPage() {
           <LeaveForm initial={editLeave}
             onSave={async d => { await updateLeave(editLeave.id, d); setEditLeave(null) }}
             onCancel={() => setEditLeave(null)} />
+        )}
+      </Modal>
+
+      {/* Modal eccezioni — chi lavora durante una chiusura */}
+      <Modal open={!!exceptionsHoliday} onClose={() => setExceptionsHoliday(null)}
+        title={exceptionsHoliday ? `Chi lavora il ${format(parseISO(exceptionsHoliday.date), 'dd MMMM yyyy', { locale: it })}` : ''}>
+        {exceptionsHoliday && (
+          <div className="space-y-3">
+            <p className="text-xs text-slate-400">
+              Seleziona le persone che lavorano durante la chiusura "<span className="text-slate-300">{exceptionsHoliday.name}</span>".
+              Per queste persone questo giorno verrà conteggiato come lavorativo nei calcoli dei costi.
+            </p>
+            <div className="space-y-2 max-h-72 overflow-y-auto">
+              {people.map(p => {
+                const hasEx = workExceptions.some(e => e.person_id === p.id && e.date === exceptionsHoliday.date)
+                return (
+                  <label key={p.id} className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-slate-700/40 cursor-pointer transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={hasEx}
+                      className="w-4 h-4 accent-blue-500"
+                      onChange={async e => {
+                        if (e.target.checked) {
+                          await upsertWorkException({ person_id: p.id, date: exceptionsHoliday.date, notes: '' })
+                        } else {
+                          await deleteWorkException(p.id, exceptionsHoliday.date)
+                        }
+                      }}
+                    />
+                    <div className="w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center text-white flex-shrink-0"
+                      style={{ background: p.color }}>
+                      {p.name[0]}
+                    </div>
+                    <div>
+                      <div className="text-sm text-slate-300">{p.name}</div>
+                      <div className="text-xs text-slate-500">{p.role}</div>
+                    </div>
+                    {hasEx && <span className="ml-auto text-xs text-amber-400 bg-amber-500/20 px-2 py-0.5 rounded-full">Lavora</span>}
+                  </label>
+                )
+              })}
+            </div>
+            <div className="flex justify-end pt-2">
+              <button className="btn-primary" onClick={() => setExceptionsHoliday(null)}>Chiudi</button>
+            </div>
+          </div>
         )}
       </Modal>
 

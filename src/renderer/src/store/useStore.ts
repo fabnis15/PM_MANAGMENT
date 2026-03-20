@@ -1,11 +1,12 @@
 import { create } from 'zustand'
-import { Person, Project, Allocation, Milestone, Settings, Alert, Holiday, Leave, MonthlyRevenue } from '../types'
+import { Person, Project, Allocation, Milestone, Settings, Alert, Holiday, Leave, MonthlyRevenue, WorkException } from '../types'
 
 export function getWorkingDays(
   start: string,
   end: string,
   holidays: Holiday[] = [],
-  personLeaves: Leave[] = []
+  personLeaves: Leave[] = [],
+  workExceptions: WorkException[] = []
 ): number {
   const s = new Date(start), e = new Date(end)
   if (s > e) return 0
@@ -24,8 +25,10 @@ export function getWorkingDays(
           ? hd.getMonth() + 1 === mm && hd.getDate() === dd
           : h.date === dateStr
       })
+      // Work exception: person works on a holiday/closure day
+      const hasException = workExceptions.some(e => e.date === dateStr)
       const onLeave = personLeaves.some(l => dateStr >= l.start_date && dateStr <= l.end_date)
-      if (!isHoliday && !onLeave) count++
+      if ((!isHoliday || hasException) && !onLeave) count++
     }
     cur.setDate(cur.getDate() + 1)
   }
@@ -47,7 +50,8 @@ function computeAlerts(
   milestones: Milestone[],
   settings: Settings,
   holidays: Holiday[],
-  leaves: Leave[]
+  leaves: Leave[],
+  workExceptions: WorkException[]
 ): Alert[] {
   const alerts: Alert[] = []
   const today = new Date()
@@ -88,7 +92,8 @@ function computeAlerts(
         return sum + (a.allocated_days || 0) * person.daily_rate
       }
       const personLeaves = leaves.filter(l => l.person_id === a.person_id)
-      return sum + getWorkingDays(a.start_date, a.end_date, holidays, personLeaves) * person.daily_rate * (a.percentage / 100)
+      const personExceptions = workExceptions.filter(e => e.person_id === a.person_id)
+      return sum + getWorkingDays(a.start_date, a.end_date, holidays, personLeaves, personExceptions) * person.daily_rate * (a.percentage / 100)
     }, 0)
     const pct = (estimatedCost / project.budget_total) * 100
     if (pct >= settings.budget_warning_threshold) {
@@ -165,6 +170,7 @@ interface Store {
   holidays: Holiday[]
   leaves: Leave[]
   monthlyRevenues: MonthlyRevenue[]
+  workExceptions: WorkException[]
   alerts: Alert[]
   loading: boolean
 
@@ -173,6 +179,9 @@ interface Store {
 
   upsertMonthlyRevenue: (d: Omit<MonthlyRevenue, 'id' | 'created_at'>) => Promise<void>
   deleteMonthlyRevenue: (projectId: number, year: number, month: number) => Promise<void>
+
+  upsertWorkException: (d: Omit<WorkException, 'id' | 'created_at' | 'person_name' | 'person_color'>) => Promise<void>
+  deleteWorkException: (personId: number, date: string) => Promise<void>
 
   createHoliday: (d: Omit<Holiday, 'id' | 'created_at'>) => Promise<void>
   updateHoliday: (id: number, d: Omit<Holiday, 'id' | 'created_at'>) => Promise<void>
@@ -210,17 +219,18 @@ export const useStore = create<Store>((set, get) => ({
   holidays: [],
   leaves: [],
   monthlyRevenues: [],
+  workExceptions: [],
   alerts: [],
   loading: false,
 
   refreshAlerts: () => {
-    const { people, projects, allocations, milestones, settings, holidays, leaves } = get()
-    set({ alerts: computeAlerts(people, projects, allocations, milestones, settings, holidays, leaves) })
+    const { people, projects, allocations, milestones, settings, holidays, leaves, workExceptions } = get()
+    set({ alerts: computeAlerts(people, projects, allocations, milestones, settings, holidays, leaves, workExceptions) })
   },
 
   loadAll: async () => {
     set({ loading: true })
-    const [people, projects, allocations, milestones, settings, holidays, leaves, monthlyRevenues] = await Promise.all([
+    const [people, projects, allocations, milestones, settings, holidays, leaves, monthlyRevenues, workExceptions] = await Promise.all([
       window.api.getPeople(),
       window.api.getProjects(),
       window.api.getAllocations(),
@@ -229,10 +239,11 @@ export const useStore = create<Store>((set, get) => ({
       window.api.getHolidays(),
       window.api.getLeaves(),
       window.api.getMonthlyRevenues(),
+      window.api.getWorkExceptions(),
     ])
     const s = settings as unknown as Settings
-    const alerts = computeAlerts(people, projects, allocations, milestones, s, holidays, leaves)
-    set({ people, projects, allocations, milestones, settings: s, holidays, leaves, monthlyRevenues, alerts, loading: false })
+    const alerts = computeAlerts(people, projects, allocations, milestones, s, holidays, leaves, workExceptions)
+    set({ people, projects, allocations, milestones, settings: s, holidays, leaves, monthlyRevenues, workExceptions, alerts, loading: false })
   },
 
   // ── People
@@ -307,6 +318,21 @@ export const useStore = create<Store>((set, get) => ({
   deleteMilestone: async (id) => {
     await window.api.deleteMilestone(id)
     set(s => ({ milestones: s.milestones.filter(x => x.id !== id) }))
+    get().refreshAlerts()
+  },
+
+  // ── Work Exceptions
+  upsertWorkException: async (d) => {
+    const we = await window.api.upsertWorkException(d)
+    set(s => {
+      const filtered = s.workExceptions.filter(e => !(e.person_id === d.person_id && e.date === d.date))
+      return { workExceptions: [...filtered, we] }
+    })
+    get().refreshAlerts()
+  },
+  deleteWorkException: async (personId, date) => {
+    await window.api.deleteWorkException(personId, date)
+    set(s => ({ workExceptions: s.workExceptions.filter(e => !(e.person_id === personId && e.date === date)) }))
     get().refreshAlerts()
   },
 

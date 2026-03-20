@@ -37,6 +37,10 @@ const api = {
   getMonthlyRevenues: () => ipcRenderer.invoke('db:getMonthlyRevenues'),
   upsertMonthlyRevenue: (d: unknown) => ipcRenderer.invoke('db:upsertMonthlyRevenue', d),
   deleteMonthlyRevenue: (projectId: number, year: number, month: number) => ipcRenderer.invoke('db:deleteMonthlyRevenue', projectId, year, month),
+
+  getWorkExceptions: () => ipcRenderer.invoke('db:getWorkExceptions'),
+  upsertWorkException: (d: unknown) => ipcRenderer.invoke('db:upsertWorkException', d),
+  deleteWorkException: (personId: number, date: string) => ipcRenderer.invoke('db:deleteWorkException', personId, date),
 }
 
 contextBridge.exposeInMainWorld('api', api)

@@ -43,7 +43,7 @@ const fmt = (n: number) =>
   n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 export default function FinanziarioPage() {
-  const { projects, allocations, people, holidays, leaves, monthlyRevenues } = useStore()
+  const { projects, allocations, people, holidays, leaves, monthlyRevenues, workExceptions } = useStore()
   const upsertMonthlyRevenue = useStore(s => s.upsertMonthlyRevenue)
 
   const currentYear = new Date().getFullYear()
@@ -130,7 +130,8 @@ export default function FinanziarioPage() {
             const effectiveStart = a.start_date > mStart ? a.start_date : mStart
             const effectiveEnd = a.end_date < mEnd ? a.end_date : mEnd
             const personLeaves = leaves.filter(l => l.person_id === a.person_id)
-            const days = getWorkingDays(effectiveStart, effectiveEnd, holidays, personLeaves)
+            const personExceptions = workExceptions.filter(e => e.person_id === a.person_id)
+            const days = getWorkingDays(effectiveStart, effectiveEnd, holidays, personLeaves, personExceptions)
             cost = days * person.daily_rate * (a.percentage / 100)
           }
 

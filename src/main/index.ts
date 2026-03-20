@@ -68,6 +68,10 @@ function registerHandlers() {
   ipcMain.handle('db:getMonthlyRevenues', () => db.getMonthlyRevenues())
   ipcMain.handle('db:upsertMonthlyRevenue', (_, data) => db.upsertMonthlyRevenue(data))
   ipcMain.handle('db:deleteMonthlyRevenue', (_, projectId, year, month) => db.deleteMonthlyRevenue(projectId, year, month))
+
+  ipcMain.handle('db:getWorkExceptions', () => db.getWorkExceptions())
+  ipcMain.handle('db:upsertWorkException', (_, data) => db.upsertWorkException(data))
+  ipcMain.handle('db:deleteWorkException', (_, personId, date) => db.deleteWorkException(personId, date))
 }
 
 app.whenReady().then(() => {
