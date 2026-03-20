@@ -3,7 +3,7 @@ import { useStore } from '../../store/useStore'
 import { Holiday, Leave } from '../../types'
 import Modal from '../ui/Modal'
 import { Plus, Pencil, Trash2, CalendarDays, Users, Building2, Globe, CheckCircle2, XCircle } from 'lucide-react'
-import { format, parseISO, differenceInCalendarDays } from 'date-fns'
+import { format, parseISO, eachDayOfInterval } from 'date-fns'
 import { it } from 'date-fns/locale'
 
 type Tab = 'holidays' | 'leaves'
@@ -18,6 +18,9 @@ const LEAVE_COLORS: Record<string, string> = {
   altro: 'bg-slate-500/20 text-slate-400',
 }
 
+function pad(n: number) { return String(n).padStart(2, '0') }
+function toDateStr(d: Date) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` }
+
 function countBusinessDays(start: string, end: string): number {
   let count = 0
   const cur = new Date(start)
@@ -31,32 +34,99 @@ function countBusinessDays(start: string, end: string): number {
 }
 
 // ── Holiday Form ──────────────────────────────────────────────────────────────
-function HolidayForm({ initial, onSave, onCancel }: {
+function HolidayForm({ initial, onSave, onCancel, existingHolidays }: {
   initial?: Holiday
-  onSave: (d: Omit<Holiday, 'id' | 'created_at'>) => void
+  onSave: (days: Omit<Holiday, 'id' | 'created_at'>[]) => void
   onCancel: () => void
+  existingHolidays?: Holiday[]
 }) {
+  const [mode, setMode] = useState<'single' | 'range'>(initial ? 'single' : 'single')
   const [form, setForm] = useState({
     name: initial?.name ?? '',
     date: initial?.date ?? '',
-    type: initial?.type ?? 'company' as 'national' | 'company',
+    rangeStart: '',
+    rangeEnd: '',
+    skipWeekends: true,
+    skipExisting: true,
+    type: (initial?.type ?? 'company') as 'national' | 'company',
     recurring: initial ? !!initial.recurring : false,
     active: initial ? !!initial.active : true,
   })
   const set = (k: string, v: unknown) => setForm(f => ({ ...f, [k]: v }))
 
+  // Set di date già presenti (festività attive)
+  const existingDates = useMemo(() => {
+    if (!existingHolidays) return new Set<string>()
+    const set = new Set<string>()
+    existingHolidays.forEach(h => {
+      if (!h.active) return
+      if (h.recurring) {
+        // La data ricorrente: match per MM-DD su qualsiasi anno
+        set.add(`recurring:${h.date.slice(5)}`) // MM-DD
+      } else {
+        set.add(h.date)
+      }
+    })
+    return set
+  }, [existingHolidays])
+
+  const isExistingDate = (d: Date): boolean => {
+    const dateStr = toDateStr(d)
+    const mmdd = dateStr.slice(5)
+    return existingDates.has(dateStr) || existingDates.has(`recurring:${mmdd}`)
+  }
+
+  // Compute preview days for range mode
+  const { included, skippedWeekend, skippedExisting } = useMemo(() => {
+    if (mode !== 'range' || !form.rangeStart || !form.rangeEnd || form.rangeStart > form.rangeEnd) {
+      return { included: [], skippedWeekend: 0, skippedExisting: 0 }
+    }
+    try {
+      const all = eachDayOfInterval({ start: new Date(form.rangeStart), end: new Date(form.rangeEnd) })
+      let skippedWeekend = 0
+      let skippedExisting = 0
+      const included: Date[] = []
+      for (const d of all) {
+        const isWeekend = d.getDay() === 0 || d.getDay() === 6
+        const isExisting = isExistingDate(d)
+        if (form.skipWeekends && isWeekend) { skippedWeekend++; continue }
+        if (form.skipExisting && isExisting) { skippedExisting++; continue }
+        included.push(d)
+      }
+      return { included, skippedWeekend, skippedExisting }
+    } catch {
+      return { included: [], skippedWeekend: 0, skippedExisting: 0 }
+    }
+  }, [mode, form.rangeStart, form.rangeEnd, form.skipWeekends, form.skipExisting, existingDates])
+
+  const rangeDays = included
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (mode === 'single') {
+      if (!form.name || !form.date) return
+      onSave([{ name: form.name, date: form.date, type: form.type, recurring: form.recurring ? 1 : 0, active: form.active ? 1 : 0 }])
+    } else {
+      if (!form.name || rangeDays.length === 0) return
+      onSave(rangeDays.map(d => ({
+        name: form.name,
+        date: toDateStr(d),
+        type: form.type,
+        recurring: 0,
+        active: form.active ? 1 : 0,
+      })))
+    }
+  }
+
   return (
-    <form onSubmit={e => { e.preventDefault(); if (!form.name || !form.date) return; onSave({ ...form, recurring: form.recurring ? 1 : 0, active: form.active ? 1 : 0 }) }}
-      className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-4">
       <div>
         <label className="label">Nome *</label>
         <input className="input" value={form.name} onChange={e => set('name', e.target.value)}
           placeholder="es. Chiusura aziendale estiva" required />
       </div>
-      <div>
-        <label className="label">Data *</label>
-        <input type="date" className="input" value={form.date} onChange={e => set('date', e.target.value)} required />
-      </div>
+
+      {/* Tipo */}
       <div>
         <label className="label">Tipo</label>
         <select className="input" value={form.type} onChange={e => set('type', e.target.value)}>
@@ -64,21 +134,109 @@ function HolidayForm({ initial, onSave, onCancel }: {
           <option value="company">Chiusura aziendale</option>
         </select>
       </div>
+
+      {/* Modalità selezione giorni — solo per nuove chiusure (non in edit) */}
+      {!initial && (
+        <div>
+          <label className="label">Selezione giorni</label>
+          <div className="flex bg-slate-700/60 border border-slate-600 rounded-lg p-1 gap-1 w-fit">
+            <button type="button"
+              onClick={() => setMode('single')}
+              className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${mode === 'single' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}>
+              Giorno singolo
+            </button>
+            <button type="button"
+              onClick={() => setMode('range')}
+              className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${mode === 'range' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}>
+              Più giorni / periodo
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Single day */}
+      {mode === 'single' && (
+        <div>
+          <label className="label">Data *</label>
+          <input type="date" className="input" value={form.date} onChange={e => set('date', e.target.value)} required />
+        </div>
+      )}
+
+      {/* Range */}
+      {mode === 'range' && (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Dal *</label>
+              <input type="date" className="input" value={form.rangeStart} onChange={e => set('rangeStart', e.target.value)} required />
+            </div>
+            <div>
+              <label className="label">Al *</label>
+              <input type="date" className="input" value={form.rangeEnd} onChange={e => set('rangeEnd', e.target.value)} required />
+            </div>
+          </div>
+
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={form.skipWeekends} onChange={e => set('skipWeekends', e.target.checked)}
+              className="w-4 h-4 accent-blue-500" />
+            <span className="text-sm text-slate-300">Escludi sabati e domeniche</span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={form.skipExisting} onChange={e => set('skipExisting', e.target.checked)}
+              className="w-4 h-4 accent-blue-500" />
+            <span className="text-sm text-slate-300">Escludi festività già inserite</span>
+          </label>
+
+          {/* Preview giorni */}
+          {rangeDays.length > 0 && (
+            <div className="bg-slate-700/40 rounded-lg px-3 py-2.5 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="text-xs text-slate-300 font-medium">
+                  {rangeDays.length} giorn{rangeDays.length !== 1 ? 'i' : 'o'} da inserire
+                </div>
+                <div className="flex gap-2 text-xs text-slate-500">
+                  {skippedWeekend > 0 && <span>{skippedWeekend} weekend saltati</span>}
+                  {skippedExisting > 0 && <span>{skippedExisting} già presenti saltati</span>}
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-1 max-h-28 overflow-y-auto">
+                {rangeDays.map(d => (
+                  <span key={toDateStr(d)} className="bg-blue-600/30 text-blue-300 text-xs px-2 py-0.5 rounded">
+                    {format(d, 'dd MMM', { locale: it })}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          {form.rangeStart && form.rangeEnd && form.rangeStart <= form.rangeEnd && rangeDays.length === 0 && (
+            <div className="text-xs text-amber-400 bg-amber-500/10 rounded-lg px-3 py-2">
+              Nessun giorno da inserire (tutti esclusi)
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Options comuni */}
       <div className="flex flex-col gap-2">
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input type="checkbox" checked={form.recurring} onChange={e => set('recurring', e.target.checked)}
-            className="w-4 h-4 accent-blue-500" />
-          <span className="text-sm text-slate-300">Ricorrente ogni anno (stessa data)</span>
-        </label>
+        {mode === 'single' && (
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={form.recurring} onChange={e => set('recurring', e.target.checked)}
+              className="w-4 h-4 accent-blue-500" />
+            <span className="text-sm text-slate-300">Ricorrente ogni anno (stessa data)</span>
+          </label>
+        )}
         <label className="flex items-center gap-2 cursor-pointer">
           <input type="checkbox" checked={form.active} onChange={e => set('active', e.target.checked)}
             className="w-4 h-4 accent-blue-500" />
           <span className="text-sm text-slate-300">Attiva (considera nei calcoli)</span>
         </label>
       </div>
+
       <div className="flex justify-end gap-3 pt-2">
         <button type="button" className="btn-ghost" onClick={onCancel}>Annulla</button>
-        <button type="submit" className="btn-primary">{initial ? 'Salva' : 'Aggiungi'}</button>
+        <button type="submit" className="btn-primary" disabled={mode === 'range' && rangeDays.length === 0}>
+          {initial ? 'Salva' : mode === 'range' ? `Aggiungi ${rangeDays.length} giorni` : 'Aggiungi'}
+        </button>
       </div>
     </form>
   )
@@ -168,6 +326,50 @@ export default function CalendarPage() {
     [leaves, filterPerson]
   )
 
+  const handleSaveHolidays = async (days: Omit<Holiday, 'id' | 'created_at'>[]) => {
+    for (const d of days) {
+      await createHoliday(d)
+    }
+    setShowNewHoliday(false)
+  }
+
+  const HolidayRow = ({ h }: { h: Holiday }) => (
+    <tr className="border-b border-slate-700/40 last:border-0 hover:bg-slate-700/20">
+      <td className="px-4 py-2.5 text-sm text-slate-300">{h.name}</td>
+      <td className="px-4 py-2.5 text-xs text-slate-400">
+        {format(parseISO(h.date), h.recurring ? 'dd MMMM' : 'dd MMMM yyyy', { locale: it })}
+      </td>
+      <td className="px-4 py-2.5 text-center">
+        {h.recurring ? <CheckCircle2 size={14} className="text-emerald-500 mx-auto" /> : <span className="text-slate-600 text-xs">—</span>}
+      </td>
+      <td className="px-4 py-2.5 text-center">
+        <button onClick={() => updateHoliday(h.id, { ...h, active: h.active ? 0 : 1 })}>
+          {h.active
+            ? <CheckCircle2 size={14} className="text-emerald-500 mx-auto" />
+            : <XCircle size={14} className="text-slate-600 mx-auto" />}
+        </button>
+      </td>
+      <td className="px-4 py-2.5">
+        <div className="flex items-center gap-1 justify-end">
+          <button className="btn-ghost p-1.5" onClick={() => setEditHoliday(h)}><Pencil size={12} /></button>
+          <button className="btn-danger p-1.5" onClick={() => setConfirmDelete({ type: 'holiday', id: h.id })}><Trash2 size={12} /></button>
+        </div>
+      </td>
+    </tr>
+  )
+
+  const tableHead = (
+    <thead>
+      <tr className="border-b border-slate-700 bg-slate-700/30">
+        <th className="text-left px-4 py-2.5 text-xs text-slate-400 font-medium">Nome</th>
+        <th className="text-left px-4 py-2.5 text-xs text-slate-400 font-medium">Data</th>
+        <th className="text-center px-4 py-2.5 text-xs text-slate-400 font-medium">Ricorrente</th>
+        <th className="text-center px-4 py-2.5 text-xs text-slate-400 font-medium">Attiva</th>
+        <th className="px-4 py-2.5"></th>
+      </tr>
+    </thead>
+  )
+
   return (
     <div className="p-6 space-y-5">
       <div className="flex items-center justify-between">
@@ -213,44 +415,12 @@ export default function CalendarPage() {
             </div>
             <div className="card p-0 overflow-hidden">
               <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-700 bg-slate-700/30">
-                    <th className="text-left px-4 py-2.5 text-xs text-slate-400 font-medium">Nome</th>
-                    <th className="text-left px-4 py-2.5 text-xs text-slate-400 font-medium">Data</th>
-                    <th className="text-center px-4 py-2.5 text-xs text-slate-400 font-medium">Ricorrente</th>
-                    <th className="text-center px-4 py-2.5 text-xs text-slate-400 font-medium">Attiva</th>
-                    <th className="px-4 py-2.5"></th>
-                  </tr>
-                </thead>
+                {tableHead}
                 <tbody>
                   {national.length === 0 && (
                     <tr><td colSpan={5} className="text-center py-8 text-slate-500 text-xs">Nessuna festività</td></tr>
                   )}
-                  {national.map(h => (
-                    <tr key={h.id} className="border-b border-slate-700/40 last:border-0 hover:bg-slate-700/20">
-                      <td className="px-4 py-2.5 text-sm text-slate-300">{h.name}</td>
-                      <td className="px-4 py-2.5 text-xs text-slate-400">
-                        {format(parseISO(h.date), h.recurring ? 'dd MMMM' : 'dd MMMM yyyy', { locale: it })}
-                      </td>
-                      <td className="px-4 py-2.5 text-center">
-                        {h.recurring ? <CheckCircle2 size={14} className="text-emerald-500 mx-auto" /> : <span className="text-slate-600 text-xs">—</span>}
-                      </td>
-                      <td className="px-4 py-2.5 text-center">
-                        <button onClick={() => updateHoliday(h.id, { ...h, active: h.active ? 0 : 1 })}>
-                          {h.active
-                            ? <CheckCircle2 size={14} className="text-emerald-500 mx-auto" />
-                            : <XCircle size={14} className="text-slate-600 mx-auto" />
-                          }
-                        </button>
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <div className="flex items-center gap-1 justify-end">
-                          <button className="btn-ghost p-1.5" onClick={() => setEditHoliday(h)}><Pencil size={12} /></button>
-                          <button className="btn-danger p-1.5" onClick={() => setConfirmDelete({ type: 'holiday', id: h.id })}><Trash2 size={12} /></button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  {national.map(h => <HolidayRow key={h.id} h={h} />)}
                 </tbody>
               </table>
             </div>
@@ -258,11 +428,13 @@ export default function CalendarPage() {
 
           {/* Company closures */}
           <div>
-            <div className="flex items-center gap-2 mb-3">
-              <Building2 size={14} className="text-slate-400" />
-              <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                Chiusure aziendali ({company.length})
-              </h2>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Building2 size={14} className="text-slate-400" />
+                <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                  Chiusure aziendali ({company.length})
+                </h2>
+              </div>
             </div>
             {company.length === 0
               ? <div className="card text-center py-8 text-slate-500 text-sm">
@@ -270,41 +442,9 @@ export default function CalendarPage() {
                 </div>
               : <div className="card p-0 overflow-hidden">
                   <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-slate-700 bg-slate-700/30">
-                        <th className="text-left px-4 py-2.5 text-xs text-slate-400 font-medium">Nome</th>
-                        <th className="text-left px-4 py-2.5 text-xs text-slate-400 font-medium">Data</th>
-                        <th className="text-center px-4 py-2.5 text-xs text-slate-400 font-medium">Ricorrente</th>
-                        <th className="text-center px-4 py-2.5 text-xs text-slate-400 font-medium">Attiva</th>
-                        <th className="px-4 py-2.5"></th>
-                      </tr>
-                    </thead>
+                    {tableHead}
                     <tbody>
-                      {company.map(h => (
-                        <tr key={h.id} className="border-b border-slate-700/40 last:border-0 hover:bg-slate-700/20">
-                          <td className="px-4 py-2.5 text-sm text-slate-300">{h.name}</td>
-                          <td className="px-4 py-2.5 text-xs text-slate-400">
-                            {format(parseISO(h.date), h.recurring ? 'dd MMMM' : 'dd MMMM yyyy', { locale: it })}
-                          </td>
-                          <td className="px-4 py-2.5 text-center">
-                            {h.recurring ? <CheckCircle2 size={14} className="text-emerald-500 mx-auto" /> : <span className="text-slate-600 text-xs">—</span>}
-                          </td>
-                          <td className="px-4 py-2.5 text-center">
-                            <button onClick={() => updateHoliday(h.id, { ...h, active: h.active ? 0 : 1 })}>
-                              {h.active
-                                ? <CheckCircle2 size={14} className="text-emerald-500 mx-auto" />
-                                : <XCircle size={14} className="text-slate-600 mx-auto" />
-                              }
-                            </button>
-                          </td>
-                          <td className="px-4 py-2.5">
-                            <div className="flex items-center gap-1 justify-end">
-                              <button className="btn-ghost p-1.5" onClick={() => setEditHoliday(h)}><Pencil size={12} /></button>
-                              <button className="btn-danger p-1.5" onClick={() => setConfirmDelete({ type: 'holiday', id: h.id })}><Trash2 size={12} /></button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
+                      {company.map(h => <HolidayRow key={h.id} h={h} />)}
                     </tbody>
                   </table>
                 </div>
@@ -379,16 +519,17 @@ export default function CalendarPage() {
       )}
 
       {/* Modals */}
-      <Modal open={showNewHoliday} onClose={() => setShowNewHoliday(false)} title="Aggiungi chiusura / festività" size="sm">
+      <Modal open={showNewHoliday} onClose={() => setShowNewHoliday(false)} title="Aggiungi chiusura / festività">
         <HolidayForm
-          onSave={async d => { await createHoliday(d); setShowNewHoliday(false) }}
+          existingHolidays={holidays}
+          onSave={handleSaveHolidays}
           onCancel={() => setShowNewHoliday(false)} />
       </Modal>
 
       <Modal open={!!editHoliday} onClose={() => setEditHoliday(null)} title="Modifica festività" size="sm">
         {editHoliday && (
           <HolidayForm initial={editHoliday}
-            onSave={async d => { await updateHoliday(editHoliday.id, d); setEditHoliday(null) }}
+            onSave={async days => { await updateHoliday(editHoliday.id, days[0]); setEditHoliday(null) }}
             onCancel={() => setEditHoliday(null)} />
         )}
       </Modal>
