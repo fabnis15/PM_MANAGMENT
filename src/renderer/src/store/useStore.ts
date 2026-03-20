@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { Person, Project, Allocation, Milestone, Settings, Alert, Holiday, Leave } from '../types'
+import { Person, Project, Allocation, Milestone, Settings, Alert, Holiday, Leave, MonthlyRevenue } from '../types'
 
 export function getWorkingDays(
   start: string,
@@ -161,11 +161,15 @@ interface Store {
   settings: Settings
   holidays: Holiday[]
   leaves: Leave[]
+  monthlyRevenues: MonthlyRevenue[]
   alerts: Alert[]
   loading: boolean
 
   loadAll: () => Promise<void>
   refreshAlerts: () => void
+
+  upsertMonthlyRevenue: (d: Omit<MonthlyRevenue, 'id' | 'created_at'>) => Promise<void>
+  deleteMonthlyRevenue: (projectId: number, year: number, month: number) => Promise<void>
 
   createHoliday: (d: Omit<Holiday, 'id' | 'created_at'>) => Promise<void>
   updateHoliday: (id: number, d: Omit<Holiday, 'id' | 'created_at'>) => Promise<void>
@@ -202,6 +206,7 @@ export const useStore = create<Store>((set, get) => ({
   settings: defaultSettings,
   holidays: [],
   leaves: [],
+  monthlyRevenues: [],
   alerts: [],
   loading: false,
 
@@ -212,7 +217,7 @@ export const useStore = create<Store>((set, get) => ({
 
   loadAll: async () => {
     set({ loading: true })
-    const [people, projects, allocations, milestones, settings, holidays, leaves] = await Promise.all([
+    const [people, projects, allocations, milestones, settings, holidays, leaves, monthlyRevenues] = await Promise.all([
       window.api.getPeople(),
       window.api.getProjects(),
       window.api.getAllocations(),
@@ -220,10 +225,11 @@ export const useStore = create<Store>((set, get) => ({
       window.api.getSettings(),
       window.api.getHolidays(),
       window.api.getLeaves(),
+      window.api.getMonthlyRevenues(),
     ])
     const s = settings as unknown as Settings
     const alerts = computeAlerts(people, projects, allocations, milestones, s, holidays, leaves)
-    set({ people, projects, allocations, milestones, settings: s, holidays, leaves, alerts, loading: false })
+    set({ people, projects, allocations, milestones, settings: s, holidays, leaves, monthlyRevenues, alerts, loading: false })
   },
 
   // ── People
@@ -299,6 +305,19 @@ export const useStore = create<Store>((set, get) => ({
     await window.api.deleteMilestone(id)
     set(s => ({ milestones: s.milestones.filter(x => x.id !== id) }))
     get().refreshAlerts()
+  },
+
+  // ── Monthly Revenue
+  upsertMonthlyRevenue: async (d) => {
+    const mr = await window.api.upsertMonthlyRevenue(d)
+    set(s => {
+      const filtered = s.monthlyRevenues.filter(r => !(r.project_id === d.project_id && r.year === d.year && r.month === d.month))
+      return { monthlyRevenues: [...filtered, mr] }
+    })
+  },
+  deleteMonthlyRevenue: async (projectId, year, month) => {
+    await window.api.deleteMonthlyRevenue(projectId, year, month)
+    set(s => ({ monthlyRevenues: s.monthlyRevenues.filter(r => !(r.project_id === projectId && r.year === year && r.month === month)) }))
   },
 
   // ── Settings

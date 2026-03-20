@@ -8,6 +8,7 @@ import AllocationsPage from './components/Allocations/AllocationsPage'
 import AlertsPage from './components/Alerts/AlertsPage'
 import SettingsPage from './components/Settings/SettingsPage'
 import CalendarPage from './components/Calendar/CalendarPage'
+import FinanziarioPage from './components/Financials/FinanziarioPage'
 import { useStore } from './store/useStore'
 
 export default function App() {
@@ -26,6 +27,7 @@ export default function App() {
         <Route path="/people" element={<PeoplePage />} />
         <Route path="/allocations" element={<AllocationsPage />} />
         <Route path="/calendar" element={<CalendarPage />} />
+        <Route path="/financials" element={<FinanziarioPage />} />
         <Route path="/alerts" element={<AlertsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Routes>

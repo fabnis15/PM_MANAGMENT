@@ -33,6 +33,10 @@ const api = {
   createLeave: (d: unknown) => ipcRenderer.invoke('db:createLeave', d),
   updateLeave: (id: number, d: unknown) => ipcRenderer.invoke('db:updateLeave', id, d),
   deleteLeave: (id: number) => ipcRenderer.invoke('db:deleteLeave', id),
+
+  getMonthlyRevenues: () => ipcRenderer.invoke('db:getMonthlyRevenues'),
+  upsertMonthlyRevenue: (d: unknown) => ipcRenderer.invoke('db:upsertMonthlyRevenue', d),
+  deleteMonthlyRevenue: (projectId: number, year: number, month: number) => ipcRenderer.invoke('db:deleteMonthlyRevenue', projectId, year, month),
 }
 
 contextBridge.exposeInMainWorld('api', api)

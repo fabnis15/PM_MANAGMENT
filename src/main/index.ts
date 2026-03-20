@@ -64,6 +64,10 @@ function registerHandlers() {
   ipcMain.handle('db:createLeave', (_, data) => db.createLeave(data))
   ipcMain.handle('db:updateLeave', (_, id, data) => db.updateLeave(id, data))
   ipcMain.handle('db:deleteLeave', (_, id) => db.deleteLeave(id))
+
+  ipcMain.handle('db:getMonthlyRevenues', () => db.getMonthlyRevenues())
+  ipcMain.handle('db:upsertMonthlyRevenue', (_, data) => db.upsertMonthlyRevenue(data))
+  ipcMain.handle('db:deleteMonthlyRevenue', (_, projectId, year, month) => db.deleteMonthlyRevenue(projectId, year, month))
 }
 
 app.whenReady().then(() => {

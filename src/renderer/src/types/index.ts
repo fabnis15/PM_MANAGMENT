@@ -91,6 +91,18 @@ export interface Leave {
   person_color?: string
 }
 
+export interface MonthlyRevenue {
+  id?: number
+  project_id: number
+  year: number
+  month: number   // 1-12
+  stima: number
+  revenue: number
+  aop: number
+  notes: string
+  created_at?: string
+}
+
 export type AlertSeverity = 'error' | 'warning' | 'info'
 export type AlertType = 'overallocation' | 'budget' | 'deadline' | 'milestone'
 
@@ -141,6 +153,10 @@ declare global {
       createLeave: (d: Omit<Leave, 'id' | 'created_at' | 'person_name' | 'person_color'>) => Promise<Leave>
       updateLeave: (id: number, d: Omit<Leave, 'id' | 'created_at' | 'person_name' | 'person_color'>) => Promise<Leave>
       deleteLeave: (id: number) => Promise<{ success: boolean }>
+
+      getMonthlyRevenues: () => Promise<MonthlyRevenue[]>
+      upsertMonthlyRevenue: (d: Omit<MonthlyRevenue, 'id' | 'created_at'>) => Promise<MonthlyRevenue>
+      deleteMonthlyRevenue: (projectId: number, year: number, month: number) => Promise<{ success: boolean }>
     }
   }
 }

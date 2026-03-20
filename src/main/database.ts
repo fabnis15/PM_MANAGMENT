@@ -13,6 +13,7 @@ function getDb(): Database.Database {
     initSchema()
     migrate()
     initCalendarSchema()
+    initFinancialSchema()
     seedDefaultSettings()
     seedHolidays()
   }
@@ -96,6 +97,24 @@ function migrate() {
 }
 
 // ── Schema festività e assenze ───────────────────────────────────────────────
+
+function initFinancialSchema() {
+  getDb().exec(`
+    CREATE TABLE IF NOT EXISTS monthly_revenue (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_id INTEGER NOT NULL,
+      year INTEGER NOT NULL,
+      month INTEGER NOT NULL,
+      stima REAL DEFAULT 0,
+      revenue REAL DEFAULT 0,
+      aop REAL DEFAULT 0,
+      notes TEXT DEFAULT '',
+      created_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(project_id, year, month),
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+  `)
+}
 
 function initCalendarSchema() {
   getDb().exec(`
@@ -370,5 +389,30 @@ export function updateLeave(id: number, data: Record<string, unknown>) {
 
 export function deleteLeave(id: number) {
   getDb().prepare('DELETE FROM leaves WHERE id=?').run(id)
+  return { success: true }
+}
+
+// ── Monthly Revenue ───────────────────────────────────────────────────────────
+
+export function getMonthlyRevenues() {
+  return getDb().prepare('SELECT * FROM monthly_revenue ORDER BY year, month, project_id').all()
+}
+
+export function upsertMonthlyRevenue(data: Record<string, unknown>) {
+  getDb()
+    .prepare(`
+      INSERT INTO monthly_revenue (project_id, year, month, stima, revenue, aop, notes)
+      VALUES (@project_id, @year, @month, @stima, @revenue, @aop, @notes)
+      ON CONFLICT(project_id, year, month) DO UPDATE SET
+        stima=@stima, revenue=@revenue, aop=@aop, notes=@notes
+    `)
+    .run(data)
+  return getDb()
+    .prepare('SELECT * FROM monthly_revenue WHERE project_id=? AND year=? AND month=?')
+    .get(data.project_id as number, data.year as number, data.month as number)
+}
+
+export function deleteMonthlyRevenue(projectId: number, year: number, month: number) {
+  getDb().prepare('DELETE FROM monthly_revenue WHERE project_id=? AND year=? AND month=?').run(projectId, year, month)
   return { success: true }
 }
